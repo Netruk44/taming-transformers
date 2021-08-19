@@ -109,6 +109,12 @@ class VQModel(pl.LightningModule):
         return x.float()
 
     def training_step(self, batch, batch_idx, optimizer_idx):
+        if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
+            print('lookahead_step enter')
+            for o in self.optimizers:
+                print('lookahead_step')
+                o.lookahead_step()
+                
         x = self.get_input(batch, self.image_key)
         xrec, qloss = self(x)
 
@@ -128,14 +134,6 @@ class VQModel(pl.LightningModule):
             self.log("train/discloss", discloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
             return discloss
-        
-        
-        print('pls')
-        if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
-            print('lookahead_step enter')
-            for o in self.optimizers:
-                print('lookahead_step')
-                o.lookahead_step()
 
     def validation_step(self, batch, batch_idx):
         x = self.get_input(batch, self.image_key)
