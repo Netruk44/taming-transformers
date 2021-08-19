@@ -130,6 +130,8 @@ class VQModel(pl.LightningModule):
             return discloss
         
         if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
+            
+            print('lookahead_step enter')
             for o in self.optimizers:
                 print('lookahead_step')
                 o.lookahead_step()
