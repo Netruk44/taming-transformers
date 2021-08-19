@@ -131,6 +131,7 @@ class VQModel(pl.LightningModule):
         
         if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
             for o in self.optimizers:
+                print('lookahead_step')
                 o.lookahead_step()
 
     def validation_step(self, batch, batch_idx):
@@ -222,6 +223,7 @@ class VQSegmentationModel(VQModel):
         
         if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
             for o in self.optimizers:
+                print('lookahead_step')
                 o.lookahead_step()
         return aeloss
 
@@ -282,6 +284,7 @@ class VQNoDiscModel(VQModel):
         
         if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
             for o in self.optimizers:
+                print('lookahead_step')
                 o.lookahead_step()
         return output
 
@@ -389,6 +392,7 @@ class GumbelVQ(VQModel):
         
         if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
             for o in self.optimizers:
+                print('lookahead_step')
                 o.lookahead_step()
 
     def validation_step(self, batch, batch_idx):
