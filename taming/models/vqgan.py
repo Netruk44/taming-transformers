@@ -129,8 +129,9 @@ class VQModel(pl.LightningModule):
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
             return discloss
         
+        
+        print('pls')
         if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
-            
             print('lookahead_step enter')
             for o in self.optimizers:
                 print('lookahead_step')
