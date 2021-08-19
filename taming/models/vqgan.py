@@ -1,3 +1,4 @@
+from collections import defaultdict
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
@@ -8,6 +9,29 @@ from taming.modules.diffusionmodules.model import Encoder, Decoder
 from taming.modules.vqvae.quantize import VectorQuantizer2 as VectorQuantizer
 from taming.modules.vqvae.quantize import GumbelQuantize
 
+# lookahead
+class Lookahead(torch.optim.Optimizer):
+    def __init__(self, optimizer, alpha=0.5):
+        self.optimizer = optimizer
+        self.alpha = alpha
+        self.param_groups = self.optimizer.param_groups
+        self.state = defaultdict(dict)
+
+    def lookahead_step(self):
+        for group in self.param_groups:
+            for fast in group["params"]:
+                param_state = self.state[fast]
+                if "slow_params" not in param_state:
+                    param_state["slow_params"] = torch.zeros_like(fast.data)
+                    param_state["slow_params"].copy_(fast.data)
+                slow = param_state["slow_params"]
+                # slow <- slow + alpha * (fast - slow)
+                slow += (fast.data - slow) * self.alpha
+                fast.data.copy_(slow)
+
+    def step(self, closure = None):
+        loss = self.optimizer.step(closure)
+        return loss
 
 class VQModel(pl.LightningModule):
     def __init__(self,
@@ -32,6 +56,9 @@ class VQModel(pl.LightningModule):
                                         remap=remap, sane_index_shape=sane_index_shape)
         self.quant_conv = torch.nn.Conv2d(ddconfig["z_channels"], embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
+        self.lookahead = ddconfig["lookahead"]
+        self.lookahead_n = ddconfig["lookahead_n"]
+        self.lookahead_alpha = ddconfig["lookahead_alpha"]
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
         self.image_key = image_key
@@ -128,6 +155,10 @@ class VQModel(pl.LightningModule):
                                   lr=lr, betas=(0.5, 0.9))
         opt_disc = torch.optim.Adam(self.loss.discriminator.parameters(),
                                     lr=lr, betas=(0.5, 0.9))
+        
+        if self.lookahead:
+            opt_ae = Lookahead(opt_ae, alpha = self.lookahead_alpha)
+            opt_disc = Lookahead(opt_disc, alpha = self.lookahead_alpha)
         return [opt_ae, opt_disc], []
 
     def get_last_layer(self):
@@ -169,6 +200,9 @@ class VQSegmentationModel(VQModel):
                                   list(self.quant_conv.parameters())+
                                   list(self.post_quant_conv.parameters()),
                                   lr=lr, betas=(0.5, 0.9))
+        
+        if self.lookahead:
+            opt_ae = Lookahead(opt_ae, alpha = self.lookahead_alpha)
         return opt_ae
 
     def training_step(self, batch, batch_idx):
@@ -255,6 +289,9 @@ class VQNoDiscModel(VQModel):
                                   list(self.quant_conv.parameters())+
                                   list(self.post_quant_conv.parameters()),
                                   lr=self.learning_rate, betas=(0.5, 0.9))
+        
+        if self.lookahead:
+            optimizer = Lookahead(optimizer, alpha = self.lookahead_alpha)
         return optimizer
 
 
