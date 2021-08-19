@@ -59,6 +59,7 @@ class VQModel(pl.LightningModule):
         self.lookahead = ddconfig["lookahead"]
         self.lookahead_n = ddconfig["lookahead_n"]
         self.lookahead_alpha = ddconfig["lookahead_alpha"]
+        self.optimizers = []
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
         self.image_key = image_key
@@ -127,6 +128,10 @@ class VQModel(pl.LightningModule):
             self.log("train/discloss", discloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
             return discloss
+        
+        if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
+            for o in self.optimizers:
+                o.lookahead_step()
 
     def validation_step(self, batch, batch_idx):
         x = self.get_input(batch, self.image_key)
@@ -159,6 +164,8 @@ class VQModel(pl.LightningModule):
         if self.lookahead:
             opt_ae = Lookahead(opt_ae, alpha = self.lookahead_alpha)
             opt_disc = Lookahead(opt_disc, alpha = self.lookahead_alpha)
+        
+        self.optimizers = [opt_ae, opt_disc]
         return [opt_ae, opt_disc], []
 
     def get_last_layer(self):
@@ -203,6 +210,8 @@ class VQSegmentationModel(VQModel):
         
         if self.lookahead:
             opt_ae = Lookahead(opt_ae, alpha = self.lookahead_alpha)
+        
+        self.optimizers = [opt_ae]
         return opt_ae
 
     def training_step(self, batch, batch_idx):
@@ -210,6 +219,10 @@ class VQSegmentationModel(VQModel):
         xrec, qloss = self(x)
         aeloss, log_dict_ae = self.loss(qloss, x, xrec, split="train")
         self.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=True)
+        
+        if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
+            for o in self.optimizers:
+                o.lookahead_step()
         return aeloss
 
     def validation_step(self, batch, batch_idx):
@@ -266,6 +279,10 @@ class VQNoDiscModel(VQModel):
         output.log("train/aeloss", aeloss,
                    prog_bar=True, logger=True, on_step=True, on_epoch=True)
         output.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=True)
+        
+        if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
+            for o in self.optimizers:
+                o.lookahead_step()
         return output
 
     def validation_step(self, batch, batch_idx):
@@ -292,6 +309,8 @@ class VQNoDiscModel(VQModel):
         
         if self.lookahead:
             optimizer = Lookahead(optimizer, alpha = self.lookahead_alpha)
+        
+        self.optimizers = [optimizer]
         return optimizer
 
 
@@ -367,6 +386,10 @@ class GumbelVQ(VQModel):
                                             last_layer=self.get_last_layer(), split="train")
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
             return discloss
+        
+        if self.lookahead and (batch_idx + 1) % self.lookahead_n == 0:
+            for o in self.optimizers:
+                o.lookahead_step()
 
     def validation_step(self, batch, batch_idx):
         x = self.get_input(batch, self.image_key)
